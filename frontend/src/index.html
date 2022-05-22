@@ -1,0 +1,131 @@
+<html xmlns="http://www.w3.org/1999/xhtml" >
+	<head>
+    <title>OnDemand file Service</title>
+		<script src="amazon-cognito-identity.min.js"></script>
+		<script src="variables.js"></script>
+	</head>
+	<body onload="tryLogin()">
+		<input id="fileupload" type="file" name="fileupload" /> 
+	  <button id="upload-button" onclick="uploadFile()">Upload	</button>
+		<span id="fileupload-progress"></span>
+
+		<script>
+			function login(){
+				var CognitoUserPool = AmazonCognitoIdentity.CognitoUserPool;
+
+				// TEST USER
+				var authenticationData = {
+					Username: 'ricardo',
+					Password: 'superSecret@!!12345',
+				};
+				var poolData = {
+					UserPoolId: UserPoolId,
+					ClientId: ClientId
+				};
+
+				var authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(
+					authenticationData
+				);
+				var userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+				var userData = {
+					Username: 'ricardo',
+					Pool: userPool,
+				};
+				var cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+				cognitoUser.authenticateUser(authenticationDetails, {
+					onSuccess: function(result) {
+						let idToken = result.getIdToken().getJwtToken();
+						setCookie("idToken", idToken)
+						console.log(idToken);
+					},
+
+					onFailure: function(err) {
+						console.log(err);
+					},
+				});
+			}
+
+			function tryLogin(){
+				let idToken = getCookie("idToken");
+				if(idToken == undefined || idToken.length < 1){
+					login();
+				}
+			}
+
+			function setCookie(cname, cvalue) {
+				const d = new Date();
+				d.setTime(d.getTime() + (60*60*1000));
+				let expires = "expires="+ d.toUTCString();
+				document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+			}
+
+			function getCookie(cname) {
+				let name = cname + "=";
+				let decodedCookie = decodeURIComponent(document.cookie);
+				let ca = decodedCookie.split(';');
+				for(let i = 0; i <ca.length; i++) {
+					let c = ca[i];
+					while (c.charAt(0) == ' ') {
+						c = c.substring(1);
+					}
+					if (c.indexOf(name) == 0) {
+						return c.substring(name.length, c.length);
+					}
+				}
+				return "";
+			}
+
+			function startUploadFile(uploadUrl){
+				console.log(uploadUrl)
+
+				let request = new XMLHttpRequest();
+				request.open('PUT', uploadUrl); 
+
+				// upload progress event
+				request.upload.addEventListener('progress', function(e) {
+					// upload progress as percentage
+					let percent_completed = (e.loaded / e.total)*100 + "%";
+					console.log(percent_completed);
+					document.querySelector('#fileupload-progress').innerHTML = percent_completed;
+				});
+
+				// request finished event
+				request.addEventListener('load', function(e) {
+					// HTTP status message (200, 404 etc)
+					console.log(request.status);
+
+					// request.response holds response from the server
+					console.log(request.response);
+				});
+
+				// send POST request to server
+				request.send(fileupload.files[0]);
+			}
+
+			function uploadFile() {
+				let idToken = getCookie("idToken");
+
+				let bodyData = {
+					"fileName": fileupload.files[0].name,
+					"ContentType": fileupload.files[0].type
+				};
+				let headersData = {
+					"Authorization": idToken,
+					"Content-Type": "application/json",
+					"Accept": "application/json"
+				};
+
+				fetch(API_URL + "/upload_file", {
+					method: "POST",
+					body: JSON.stringify(bodyData),
+					headers: new Headers(headersData)
+				}).then(response => {
+					if (!response.ok) {
+						throw new Error(`${response.status}: ${response.statusText}`);
+					}
+					response.json().then(body => startUploadFile(body.url));
+				}); 
+			}
+		</script>
+  
+</html>
